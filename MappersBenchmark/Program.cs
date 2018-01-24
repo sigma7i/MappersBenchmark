@@ -37,8 +37,11 @@ namespace MappersBenchmark
 			ExpressMapper.Mapper.Register<ClassB, ClassA>();
 			ExpressMapper.Mapper.Compile();
 
-
 			var singleInit = FlashMapperConfig;
+
+			var mapper = RoslynMapper.MapEngine.DefaultInstance;
+			mapper.SetMapper<ClassB, ClassA>();
+			mapper.Build();
 		}
 
 		private static IMappingConfiguration mappingConfiguration;
@@ -97,6 +100,7 @@ namespace MappersBenchmark
 		public Adapter()
 		{
 			Program.ConfigureMappings();
+			//	_roslynMapper = RoslynMapper.MapEngine.DefaultInstance.GetMapper<ClassB, ClassA>();
 		}
 
 		public static readonly ClassB TargetTest = new ClassB
@@ -111,22 +115,23 @@ namespace MappersBenchmark
 											   }
 		};
 
-		public static ClassA MapByHandle(ClassB target)
+		//private static RoslynMapper.IMapper<ClassB, ClassA> _roslynMapper;
+
+		public static ClassA MapByHandleDeepCopy(ClassB target)
 		{
-			var thi = new ClassA();
-			thi.Prop1 = target.Prop1;
-			thi.Prop2 = target.Prop2;
-			thi.Prop3 = target.Prop3;
+			var thi = new ClassA
+			{
+				Prop1 = target.Prop1,
+				Prop2 = target.Prop2,
+				Prop3 = target.Prop3,
+				Prop4 = new List<int>(),
+				Prop5 = new NestedClass { NestedPropInt = target.Prop5.NestedPropInt, NestedPropString = target.Prop5.NestedPropString },
+				ClassArray = new List<NestedClass>()
+			};
 
-
-			thi.Prop4 = new List<int>();
 			for (int i = 0; i < target.Prop4.Count; i++)
 				thi.Prop4.Add(target.Prop4[i]);
 
-			thi.Prop5 = new NestedClass { NestedPropInt = target.Prop5.NestedPropInt, NestedPropString = target.Prop5.NestedPropString };
-
-
-			thi.ClassArray = new List<NestedClass>();
 			for (int i = 0; i < target.ClassArray.Count; i++)
 			{
 				var cl = new NestedClass();
@@ -134,6 +139,21 @@ namespace MappersBenchmark
 				cl.NestedPropString = target.ClassArray[i].NestedPropString;
 				thi.ClassArray.Add(cl);
 			}
+
+			return thi;
+		}
+
+		public static ClassA MapByHandleSimpleCopy(ClassB target)
+		{
+			var thi = new ClassA
+			{
+				Prop1 = target.Prop1,
+				Prop2 = target.Prop2,
+				Prop3 = target.Prop3,
+				Prop4 = target.Prop4,
+				Prop5 = target.Prop5,
+				ClassArray = target.ClassArray
+			};
 
 			return thi;
 		}
@@ -178,18 +198,26 @@ namespace MappersBenchmark
 			return Program.FlashMapperConfig.Convert<ClassB>(classB).To<ClassA>();
 		}
 
+		public static ClassA RoslynMapperMap(ClassB classB)
+		{
+			var _roslynMapper = RoslynMapper.MapEngine.DefaultInstance.GetMapper<ClassB, ClassA>();
+			return _roslynMapper.Map(classB);
+		}
+
 		[Benchmark(Description = "TinyMapper")]
 		public ClassA TinyMapperTest() => TinyMapperMap(TargetTest);
 
+		[Benchmark]
+		public ClassA HandwrittenDeep() => MapByHandleDeepCopy(TargetTest);
+
 		[Benchmark(Baseline = true)]
-		public ClassA Handwritten() => MapByHandle(TargetTest);
+		public ClassA Handwritten() => MapByHandleSimpleCopy(TargetTest);
 
 		[Benchmark]
 		public ClassA EmitMapper() => MapObjectEmit(TargetTest);
 
 		[Benchmark]
 		public ClassA AutoMapper() => AutoMapper(TargetTest);
-
 
 		[Benchmark(Description = "ExpressMapper")]
 		public ClassA ExpressMapperTest() => ExpressMapperMap(TargetTest);
@@ -205,6 +233,9 @@ namespace MappersBenchmark
 
 		[Benchmark]
 		public ClassA FlashMapper() => FlashMapperMap(TargetTest);
+
+		[Benchmark(Description = "RoslynMapper")]
+		public ClassA RoslynMapperTest() => RoslynMapperMap(TargetTest);
 
 		public void MapObject(ClassA source, ClassB target)
 		{
